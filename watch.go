@@ -185,7 +185,7 @@ func (a *App) watchCoursePubCore(
 				})
 				// 点击 "教务管理系统"
 				page.Evaluate(`() => {
-					const items = document.querySelectorAll('#common_div > ul > li > div.text-box')
+					const items = document.querySelectorAll('#recently_div > ul > li > div.text-box')
 					for (const item of items) {
 						if (item.textContent?.includes('教务管理系统')) {
 							item.parentElement?.click()
@@ -432,7 +432,7 @@ func (a *App) watchCoursePubSyncCore(
 		})
 		// 点击 "教务管理系统"
 		page.Evaluate(`() => {
-			const items = document.querySelectorAll('#common_div > ul > li > div.text-box')
+			const items = document.querySelectorAll('#recently_div > ul > li > div.text-box')
 			for (const item of items) {
 				if (item.textContent?.includes('教务管理系统')) {
 					item.parentElement?.click()
@@ -672,7 +672,7 @@ func (a *App) watchCourseMajCore(
 		})
 		// 点击 "教务管理系统"
 		page.Evaluate(`() => {
-			const items = document.querySelectorAll('#common_div > ul > li > div.text-box')
+			const items = document.querySelectorAll('#recently_div > ul > li > div.text-box')
 			for (const item of items) {
 				if (item.textContent?.includes('教务管理系统')) {
 					item.parentElement?.click()
