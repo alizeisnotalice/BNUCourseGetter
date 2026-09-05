@@ -1,176 +1,92 @@
-import { Dialog } from '../wailsjs/go/main/App'
+import { Dialog, StartCourses, RehearseCourses, StopCourses } from '../wailsjs/go/main/App'
 import { Form, Radio, Input, Button, Space, Select, Checkbox } from 'antd'
 import { PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { useZustand } from '../libs/useZustand'
-import type { SystemStatus, BrowserStatus } from '../libs/types'
 import { useState, useRef, useEffect } from 'react'
-import { EventsEmit } from '../wailsjs/runtime/runtime'
-import { CatchCoursePub, WatchCoursePub, WatchCourseMaj, CatchCourseMaj, WatchCoursePubSync, WatchCourseMajSync } from '../wailsjs/go/main/App'
+import { EventsEmit, EventsOn } from '../wailsjs/runtime/runtime'
+import { clearLegacySecrets, courseKey, loadCourses, normalizeCourses, saveSettings } from '../libs/courseSettings'
+import type { Course, CourseRequest, CourseStatus } from '../libs/courseSettings'
+import { CourseResults } from './CourseResults'
 
-// 抢课函数
-const funcs = {
-  major: {
-    CatchCourse: CatchCourseMaj,
-    WatchCourse: WatchCourseMaj,
-    WatchCourseSync: WatchCourseMajSync,
-  },
-  public: {
-    CatchCourse: CatchCoursePub,
-    WatchCourse: WatchCoursePub,
-    WatchCourseSync: WatchCoursePubSync,
-  },
-}
-
-type FormValues = {
-  mode: 'CatchCourse' | 'WatchCourse' | 'WatchCourseSync' // 存在 localStorage
-  speed: number // 存在 localStorage
-  studentID: string // 存在 localStorage
-  password: string // 存在 localStorage (如果记住密码)
-  network: 'webvpn' | 'intranet' // 存在 localStorage
-  courses: { 
-    courseID: string, 
-    classID: string,
-    type: 'public' | 'major'
-  }[] // 存在 localStorage
+type FormValues = Omit<CourseRequest, 'headless' | 'useWebVpn'> & {
+  network: 'webvpn' | 'intranet'
   _courseID: string
   _classID: string
   _type: 'public' | 'major'
-  [key: string]: string | number | { courseID: string, classID: string }[]
 }
 
-// 如果版本不一致, 则清除 localStorage
-const VERSION: number = 3
-if (Number(localStorage.getItem('version')) !== VERSION) {
-  localStorage.clear()
-  localStorage.setItem('version', String(VERSION))
-}
+clearLegacySecrets(localStorage)
 
 export function Content() {
-
   const { browserStatus, systemStatus, currentStatus, importantStatus, disabled, setDisabled } = useZustand()
   const [form] = Form.useForm<FormValues>()
-  // 表单提交回调
-  async function handleSubmit(browserStatus: BrowserStatus, systemStatus: SystemStatus, value: FormValues) {
-    // 检查浏览器状态
-    if (browserStatus === '安装中') {
-      Dialog('warning', '请等待浏览器安装完成')
-      return
-    } else if (browserStatus === '安装失败') {
-      Dialog('error', '浏览器安装失败, 请检查网络并尝试重启应用')
+  const [stopping, setStopping] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [courseStatuses, setCourseStatuses] = useState<Record<string, CourseStatus>>({})
+  const activeRun = useRef<Promise<void> | null>(null)
+  const busy = useRef(false)
+  const stoppingRef = useRef(false)
+  useEffect(() => EventsOn('courseStatus', (status: CourseStatus) => {
+    setCourseStatuses(previous => ({ ...previous, [status.key]: status }))
+  }), [])
+
+  function reportError(error: unknown) {
+    const message = `选课出错: ${String(error || '未知错误')}`
+    EventsEmit('currentStatus', message)
+    EventsEmit('importantStatus', message)
+  }
+  async function handleSubmit(value: FormValues, rehearsal = false) {
+    if (busy.current || systemStatus !== '空闲') return
+    if (browserStatus !== '已安装') {
+      await Dialog('warning', '请等待浏览器安装完成；安装失败时请检查网络并重启应用')
       return
     }
-    // 检查课程添加
-    if (value.courses.length === 0) {
-      Dialog('error', '请添加课程')
-      setDisabled(false)
-      return
+    const normalized = normalizeCourses(courses)
+    if (!normalized.length) { await Dialog('error', '请添加课程'); return }
+    const request: CourseRequest = {
+      mode: value.mode, speed: value.speed, studentID: value.studentID.trim(), password: value.password,
+      courses: normalized, headless: rehearsal ? false : localStorage.getItem('isHeadless') !== 'no',
+      useWebVpn: value.network === 'webvpn',
     }
-    // 禁用表单
+    busy.current = true
     setDisabled(true)
-    // 保存相关数据
-    for (const key in value) { 
-      if (key === 'courses') {
-        localStorage.setItem(key, JSON.stringify(value[key]))
-      } else {
-        localStorage.setItem(key, String(value[key]))
-      }
-    }
-    localStorage.getItem('isRemember') === 'yes' || localStorage.setItem('password', '') // 清除密码
-
+    setRunning(true)
+    setCourseStatuses(Object.fromEntries(normalized.map(course => [courseKey(course), { ...course, key: courseKey(course), state: 'pending', message: '等待查询' }])))
     try {
-      // 发送开始抢课事件
-      const res = await Dialog('question', localStorage.getItem('isHeadless') === 'no' ? 
-        '即将开始抢课\n过程中请勿手动操作浏览器\n如需强制退出, 可直接关闭小鸦抢课\n是否继续?' :
-        '即将开始抢课\n如需强制退出, 可直接关闭小鸦抢课\n是否继续?'
-      )
-      // 如果不点击 Yes, 则不执行
-      if (res !== 'Yes') {
-        setDisabled(false)
-        return
-      }
-      // 课程和班级
-      const publicCourses = value.courses.filter(course => course.type === 'public')
-      const majorCourses = value.courses.filter(course => course.type === 'major')
-      // 如果课程数大于 1, 则警告
-      if (value.courses.length > 1 && value.mode === 'CatchCourse') {
-        const res = await Dialog('question', `即将开启 ${value.courses.length} 个页面同时抢课\n抢课模式下, 每个页面占用内存会逐渐增加\n所以建议不要提前太多时间开始抢课\n请您确认是否继续?`)
-        if (res !== 'Yes') {
-          setDisabled(false)
-          return
-        }
-      }
-      // 检查并设置系统状态
-      if (systemStatus !== '空闲') {
-        Dialog('error', `请等待当前 ${systemStatus} 状态结束`)
-        setDisabled(false)
-        return
-      } else if (value.mode === 'WatchCourse') {
-        EventsEmit('systemStatus', '多线程蹲课中')
-      } else if (value.mode === 'CatchCourse') {
-        EventsEmit('systemStatus', '抢课中')
-      } else if (value.mode === 'WatchCourseSync') {
-        EventsEmit('systemStatus', '单线程蹲课中')
-      }
-
-      // 抢课函数
-      if ((value.mode === 'WatchCourseSync' || value.mode === 'WatchCourse') && localStorage.getItem('isProtect') === 'yes') {
-        // 蹲课保护: Promise 被拒绝时, 会自动重试
-        const autoRetry = async (func: typeof WatchCoursePub | typeof WatchCoursePubSync | typeof WatchCourseMaj | typeof WatchCourseMajSync, speed: number, studentID: string, password: string, courseID: string[], classID: string[], isHeadless: boolean, useWebVpn: boolean) => {
-          // eslint-disable-next-line no-constant-condition
-          while (true) {
-            try {
-              await func(speed, studentID, password, courseID, classID, isHeadless, useWebVpn)
-              break
-            } catch (err) {
-              EventsEmit('currentStatus', `检测到发生错误: ${err}`)
-              EventsEmit('currentStatus', '蹲课保护已启动, 重试 (如需退出, 直接关闭小鸦抢课即可)')
-            }
-          }
-        }
-        // 开始蹲课保护
-        if (publicCourses.length > 0 && majorCourses.length > 0) {
-          const res = await Promise.allSettled([
-            autoRetry(funcs.public[value.mode], value.speed, value.studentID, value.password, publicCourses.map(course => course.courseID), publicCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn'),
-            autoRetry(funcs.major[value.mode], value.speed, value.studentID, value.password, majorCourses.map(course => course.courseID), majorCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn'),
-          ])
-          res.forEach((res) => {
-            if (res.status === 'rejected') {
-              EventsEmit('currentStatus', `选课出错: ${res.reason || '未知错误'}`)
-              EventsEmit('importantStatus', `选课出错: ${res.reason || '未知错误'}`)
-            }
-          })
-          return
-        } else if (publicCourses.length > 0) {
-          await autoRetry(funcs.public[value.mode], value.speed, value.studentID, value.password, publicCourses.map(course => course.courseID), publicCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn')
-        } else if (majorCourses.length > 0) {
-          await autoRetry(funcs.major[value.mode], value.speed, value.studentID, value.password, majorCourses.map(course => course.courseID), majorCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn')
-        }
-      } else {
-        // 关闭蹲课保护或抢课
-        if (publicCourses.length > 0 && majorCourses.length > 0) {
-          const res = await Promise.allSettled([
-            funcs.public[value.mode](value.speed, value.studentID, value.password, publicCourses.map(course => course.courseID), publicCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn'),
-            funcs.major[value.mode](value.speed, value.studentID, value.password, majorCourses.map(course => course.courseID), majorCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn'),
-          ])
-          res.forEach((res) => {
-            if (res.status === 'rejected') {
-              EventsEmit('currentStatus', `选课出错: ${res.reason || '未知错误'}`)
-              EventsEmit('importantStatus', `选课出错: ${res.reason || '未知错误'}`)
-            }
-          })
-          return
-        } else if (publicCourses.length > 0) {
-          await funcs.public[value.mode](value.speed, value.studentID, value.password, publicCourses.map(course => course.courseID), publicCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn')
-        } else if (majorCourses.length > 0) {
-          await funcs.major[value.mode](value.speed, value.studentID, value.password, majorCourses.map(course => course.courseID), majorCourses.map(course => course.classID), localStorage.getItem('isHeadless') !== 'no', localStorage.getItem('network') === 'webvpn')
-        }
-      }
-    } catch (err) {
-      EventsEmit('currentStatus', `选课出错: ${err || '未知错误'}`)
-      EventsEmit('importantStatus', `选课出错: ${err || '未知错误'}`)
+      // 演练显示浏览器，但不改变用户正式选课的显示偏好。
+      saveSettings(localStorage, { ...request, headless: localStorage.getItem('isHeadless') !== 'no' })
+      EventsEmit('systemStatus', rehearsal ? '演练中' : value.mode === 'CatchCourse' ? '抢课中' : '蹲课中')
+      activeRun.current = rehearsal ? RehearseCourses(request) : StartCourses(request)
+      await activeRun.current
+    } catch (error) {
+      reportError(error)
     } finally {
-      EventsEmit('systemStatus', '空闲')
-      setDisabled(false)
+      activeRun.current = null
+      if (!stoppingRef.current) finishRun()
+    }
+  }
+  function finishRun() {
+    busy.current = false
+    setRunning(false)
+    setDisabled(false)
+    EventsEmit('systemStatus', '空闲')
+  }
+  async function handleStop() {
+    if (!busy.current || stoppingRef.current) return
+    stoppingRef.current = true
+    setStopping(true)
+    EventsEmit('systemStatus', '停止中')
+    try {
+      await StopCourses()
+      await activeRun.current?.catch(() => undefined)
+    } catch (error) {
+      reportError(error)
+      // 即使停止接口失败，也等待运行接口结束后才解锁表单。
+      await activeRun.current?.catch(() => undefined)
+    } finally {
+      stoppingRef.current = false
+      setStopping(false)
+      finishRun()
     }
   }
 
@@ -192,13 +108,13 @@ export function Content() {
   }, [results])
 
   // 课程列表
-  const [courses, setCourses] = useState<FormValues['courses']>(JSON.parse(localStorage.getItem('courses') ?? '[]'))
+  const [courses, setCourses] = useState<Course[]>(() => loadCourses(localStorage))
 
   return (
     <div
       className='w-full h-full relative grid grid-rows-[1fr,10rem] overflow-hidden border-t border-rose-100 border-solid'
     >
-      <div className='w-full flex flex-col items-center justify-center overflow-auto py-4'>
+      <div className='w-full flex flex-col items-center overflow-auto py-4'>
         <Form
           id='form'
           form={form}
@@ -209,13 +125,13 @@ export function Content() {
           initialValues={{
             mode: localStorage.getItem('mode') || 'CatchCourse',
             speed: Number(localStorage.getItem('speed')) || 1000,
-            courseType: localStorage.getItem('courseType') || 'public',
+            _type: 'public',
             studentID: localStorage.getItem('studentID') || '',
-            password: localStorage.getItem('password') || '',
+            password: '',
             network: localStorage.getItem('network') || 'intranet',
           }}
           onFinish={async value => {
-            await handleSubmit(browserStatus, systemStatus, { ...value, courses })
+            await handleSubmit({ ...value, courses })
           }}
         >
           <Form.Item label='抢课模式' required style={{ marginBottom: '1rem' }}>
@@ -232,28 +148,12 @@ export function Content() {
                   options={[
                     { label: '抢课', value: 'CatchCourse' },
                     { label: '多线程蹲课', value: 'WatchCourse' },
-                    { label: '单线程蹲课', value: 'WatchCourseSync', style: { borderStartEndRadius: '0px', borderEndEndRadius: '0px', borderRight: 'none' } },
+                    { label: '单线程蹲课', value: 'WatchCourseSync' },
                   ]}
                   optionType='button'
                   buttonStyle='solid'
                 />
               </Form.Item>
-              <div className='flex items-center justify-center border rounded-e-md border-[#d9d9d9] pl-3 pr-1'>
-                <Checkbox
-                  id='protect-select'
-                  className='text-nowrap'
-                  defaultChecked={localStorage.getItem('isProtect') === 'yes'}
-                  onChange={e => {
-                    if (e.target.checked) {
-                      localStorage.setItem('isProtect', 'yes')
-                    } else {
-                      localStorage.setItem('isProtect', 'no')
-                    }
-                  }}
-                >
-                  蹲课保护
-                </Checkbox>
-              </div>
             </Space.Compact>
           </Form.Item>
           <Form.Item label='学号密码' required style={{ marginBottom: '1rem' }}>
@@ -272,23 +172,6 @@ export function Content() {
               >
                 <Input.Password id='student-password' style={{ width: '50%' }} placeholder='请输入密码' />
               </Form.Item>
-              <div className='flex items-center justify-center border rounded-e-md border-[#d9d9d9] pl-3 pr-1'>
-                <Checkbox
-                  id='remember-password'
-                  className='text-nowrap'
-                  defaultChecked={localStorage.getItem('isRemember') === 'yes'}
-                  onChange={e => {
-                    if (e.target.checked) {
-                      localStorage.setItem('isRemember', 'yes')
-                    } else {
-                      localStorage.setItem('isRemember', 'no')
-                      localStorage.setItem('password', '')
-                    }
-                  }}
-                >
-                  记住密码
-                </Checkbox>
-              </div>
             </Space.Compact>
           </Form.Item>
           <Form.Item label='其他设置' style={{ marginBottom: '1rem' }}>
@@ -375,13 +258,13 @@ export function Content() {
                 id='add-course'
                 type='primary' 
                 className='border-gray-300 border-l-gray-200'
-                icon={<PlusOutlined />} 
+                icon={<PlusOutlined />} aria-label='添加课程'
                 onClick={() => {
-                  const courseID = form.getFieldValue('_courseID')
-                  const classID = form.getFieldValue('_classID')
+                  const courseID = form.getFieldValue('_courseID')?.trim()
+                  const classID = form.getFieldValue('_classID')?.trim()
                   const type = form.getFieldValue('_type')
                   if (courseID && classID && type) {
-                    setCourses(prev => [...prev, { courseID: courseID, classID: classID, type: type }])
+                    setCourses(prev => normalizeCourses([...prev, { courseID, classID, type }]))
                     form.resetFields(['_courseID', '_classID', '_type'])
                   } else {
                     Dialog('error', '请输入课程类别、课程代码、上课班号')
@@ -397,11 +280,11 @@ export function Content() {
           >
           {
             courses.length > 0 ? courses.map((course, index) => (
-              <div key={index} className='flex items-center justify-center gap-2 border flex-nowrap text-xs py-1 px-2 rounded-full'>
+              <div key={courseKey(course)} className='flex items-center justify-center gap-2 border flex-nowrap text-xs py-1 px-2 rounded-full'>
                 <p>{course.type === 'public' ? '选公共选修课' : '按开课计划选课'} | {course.courseID} | {course.classID}</p>
-                <CloseOutlined onClick={() => {
+                <Button size='small' type='text' disabled={disabled} aria-label={`删除 ${course.courseID} 班号 ${course.classID}`} icon={<CloseOutlined />} onClick={() => {
                   setCourses(prev => prev.filter((_, i) => i !== index))
-                }} className='cursor-pointer' />
+                }} />
               </div>
             )) : <p className='text-sm'>请添加课程</p>
           }
@@ -413,9 +296,20 @@ export function Content() {
             block
             id='start-button'
           >
-            开始
+            开始选课
           </Button>
+          <Button id='rehearse-button' block className='mt-2' onClick={async () => {
+            try { const value = await form.validateFields(); await handleSubmit({ ...value, courses }, true) }
+            catch { /* 表单字段显示验证错误。 */ }
+          }}>只查询演练（显示浏览器）</Button>
+          <p className='mt-2 text-xs'>演练只查询，不提交选课。密码仅在本次打开期间保存在内存。</p>
         </Form>
+        <div className='w-full max-w-lg pb-4'>
+          <Button id='stop-button' block danger disabled={!running || stopping} loading={stopping} onClick={handleStop}>
+            {stopping ? '正在停止并清理…' : '停止任务'}
+          </Button>
+          <CourseResults statuses={Object.values(courseStatuses)} />
+        </div>
       </div>
 
       <div className='w-full h-full grid grid-cols-2'>

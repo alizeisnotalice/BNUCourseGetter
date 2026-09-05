@@ -33,3 +33,7 @@ export function WatchCoursePub(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
 export function WatchCoursePubSync(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['WatchCoursePubSync'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
+
+export function StartCourses(request) { return window['go']['main']['App']['StartCourses'](request); }
+export function RehearseCourses(request) { return window['go']['main']['App']['RehearseCourses'](request); }
+export function StopCourses() { return window['go']['main']['App']['StopCourses'](); }

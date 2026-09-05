@@ -30,7 +30,7 @@ export function tutorial() {
       },
       {
         element: '#refresh-button',
-        popover: { title: '刷新按钮', description: '点击这个按钮可以刷新软件, 刷新会重置日志, 但不会中断抢课' },
+        popover: { title: '刷新按钮', description: '点击这个按钮可以刷新软件并重置日志；任务运行中不可刷新，请先停止任务' },
       },
       {
         element: '#minimise-button',
@@ -62,7 +62,7 @@ export function tutorial() {
       },
       {
         element: '#catch-mode',
-        popover: { title: '抢课模式', description: '这里可以选择抢课模式, 以及设置是否开启蹲课保护' },
+        popover: { title: '抢课模式', description: '这里可以选择抢课模式；临时网络错误由程序有限重试，登录或页面错误需处理后重启任务' },
       },
       {
         element: '#catch-mode-select',
@@ -78,11 +78,7 @@ export function tutorial() {
       },
       {
         element: '#catch-mode-select',
-        popover: { title: '抢课模式', description: '三个模式的详细区别详见 Github, 特别提示: 两个蹲课模式都会定期重启浏览器以降低内存消耗, 但抢课模式不会, 所以请不要提前太久开启抢课模式 (建议提前 2-3 分钟开启即可), 以免内存占用过高导致抢课失败' },
-      },
-      {
-        element: '#protect-select',
-        popover: { title: '蹲课保护', description: '开启蹲课保护后, 多线程蹲课和单线程蹲课时发生任何错误都会自动重试, 可以有效地避免网络波动导致的蹲课中断' },
+        popover: { title: '抢课模式', description: '抢课模式遇到满员会结束该课程；蹲课模式会继续查询。浏览器和页面会复用，停止按钮会等待任务退出' },
       },
       {
         element: '#student-id',
@@ -90,11 +86,7 @@ export function tutorial() {
       },
       {
         element: '#student-password',
-        popover: { title: '密码', description: '这里填写你的数字京师密码, 请放心, 所有数据都只会保存在你的电脑本地' },
-      },
-      {
-        element: '#remember-password',
-        popover: { title: '记住密码', description: '勾选这个选项可以在下次打开软件时自动填写密码' },
+        popover: { title: '密码', description: '这里填写你的数字京师密码。密码仅保存在本次打开的内存中，退出后需重新填写' },
       },
       {
         element: '#refresh-select',
@@ -137,12 +129,20 @@ export function tutorial() {
         popover: { title: '已添加课程', description: '这里会显示你已经添加的课程, 可以点击叉号删除' },
       },
       {
+        element: '#rehearse-button',
+        popover: { title: '只查询演练', description: '显示浏览器，检查登录、课程类别和班号，不提交选课' },
+      },
+      {
+        element: '#stop-button',
+        popover: { title: '停止任务', description: '点击后取消任务；等待清理结束，表单才会恢复可用' },
+      },
+      {
         element: '#start-button',
         popover: { title: '开始按钮', description: '确认信息无误后, 点击这个按钮即可开始抢课' },
       },
       {
         element: undefined,
-        popover: { title: '重要提示', description: '1: 再次提醒不要提前太久开启抢课模式, 以免内存占用过高导致抢课失败. 而蹲课模式没有内存占用问题, 请放心使用' },
+        popover: { title: '重要提示', description: '1: 首次使用先点击只查询演练，确认课程类别、班号和页面适配情况。演练不会提交选课' },
       },
       {
         element: undefined,

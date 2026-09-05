@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "bun x --bun vite",
     "build": "bun x --bun vite build",
-    "preview": "bun x --bun vite preview"
+    "preview": "bun x --bun vite preview",
+    "test": "bun test tests",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@ant-design/icons": "^5.5.2",

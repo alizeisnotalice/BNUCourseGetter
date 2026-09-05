@@ -16,3 +16,7 @@ export function WatchCourseMajSync(arg1:number,arg2:string,arg3:string,arg4:Arra
 export function WatchCoursePub(arg1:number,arg2:string,arg3:string,arg4:Array<string>,arg5:Array<string>,arg6:boolean,arg7:boolean):Promise<void>;
 
 export function WatchCoursePubSync(arg1:number,arg2:string,arg3:string,arg4:Array<string>,arg5:Array<string>,arg6:boolean,arg7:boolean):Promise<void>;
+
+export function StartCourses(request: import('../../../libs/courseSettings').CourseRequest): Promise<void>;
+export function RehearseCourses(request: import('../../../libs/courseSettings').CourseRequest): Promise<void>;
+export function StopCourses(): Promise<void>;

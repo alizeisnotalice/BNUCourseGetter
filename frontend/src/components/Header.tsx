@@ -28,7 +28,7 @@ export function Header() {
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState<boolean>(false)
   useEffect(() => setIsAlwaysOnTop(localStorage.getItem('isAlwaysOnTop') === 'true'), [])
   // 系统状态
-  const { systemStatus } = useZustand()
+  const { systemStatus, disabled } = useZustand()
 
   return (
     <header 
@@ -68,6 +68,7 @@ export function Header() {
       </button>
       <button
         id='refresh-button'
+        disabled={disabled}
         title='刷新'
         className='header-btn'
         onClick={() => {
