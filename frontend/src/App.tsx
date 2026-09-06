@@ -93,7 +93,7 @@ export default function App() {
             <LoadingOutlined className='mr-1 mb-6' /> 加载中
           </p>
           <p className='text-xs opacity-75 mb-1'>
-            首次启动时需要在线下载浏览器, 请耐心等待
+            首次启动时需要准备浏览器组件；已安装 Chrome 或 Edge 时会直接使用
           </p>
           <p className='text-xs opacity-75'>
             如果长时间无响应, 请检查网络连接并重启应用

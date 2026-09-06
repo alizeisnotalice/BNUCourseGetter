@@ -18,6 +18,18 @@ export function InstallBrowser() {
   return window['go']['main']['App']['InstallBrowser']();
 }
 
+export function RehearseCourses(arg1) {
+  return window['go']['main']['App']['RehearseCourses'](arg1);
+}
+
+export function StartCourses(arg1) {
+  return window['go']['main']['App']['StartCourses'](arg1);
+}
+
+export function StopCourses() {
+  return window['go']['main']['App']['StopCourses']();
+}
+
 export function WatchCourseMaj(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['WatchCourseMaj'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
@@ -33,7 +45,3 @@ export function WatchCoursePub(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
 export function WatchCoursePubSync(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['WatchCoursePubSync'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
-
-export function StartCourses(request) { return window['go']['main']['App']['StartCourses'](request); }
-export function RehearseCourses(request) { return window['go']['main']['App']['RehearseCourses'](request); }
-export function StopCourses() { return window['go']['main']['App']['StopCourses'](); }

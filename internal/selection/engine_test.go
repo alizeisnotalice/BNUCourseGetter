@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -78,7 +79,7 @@ func TestNormalizePreservesClassIdentifierAndDeduplicates(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, []Target{{Type: "major", CourseID: "PHY101", ClassID: "01"}}) {
 		t.Fatalf("got %v, %v", got, err)
 	}
-	for _, v := range [][]Target{nil, {{Type: "other", CourseID: "X", ClassID: "1"}}, {{Type: "public", CourseID: " ", ClassID: "1"}}, {{Type: "public", CourseID: "X", ClassID: " "}}, {{Type: "public", CourseID: "X|Y", ClassID: "1"}}, {{Type: "public", CourseID: "X", ClassID: "1\n2"}}} {
+	for _, v := range [][]Target{nil, {{Type: "other", CourseID: "X", ClassID: "1"}}, {{Type: "public", CourseID: " ", ClassID: "1"}}, {{Type: "public", CourseID: "X", ClassID: " "}}, {{Type: "public", CourseID: "X|Y", ClassID: "1"}}, {{Type: "public", CourseID: "X", ClassID: "1\n2"}}, {{Type: "public", CourseID: strings.Repeat("X", 129), ClassID: "01"}}} {
 		if _, err := Normalize(v); err == nil {
 			t.Errorf("accepted invalid targets %v", v)
 		}
@@ -112,7 +113,7 @@ func TestSubmissionIsNeverReportedSelectedWithoutVerification(t *testing.T) {
 		verify   error
 		state    string
 	}{
-		{"verified", nil, true, nil, "selected"}, {"unconfirmed", nil, false, nil, "unknown"}, {"verification timeout", nil, false, context.DeadlineExceeded, "unknown"}, {"submit timeout", context.DeadlineExceeded, false, nil, "unknown"}, {"submit timeout but selected", context.DeadlineExceeded, true, nil, "selected"}, {"conflict", Error("conflict", "conflict"), false, nil, "conflict"}, {"ineligible", Error("ineligible", "ineligible"), false, nil, "ineligible"}, {"full after submission", Error("full", "full"), false, nil, "full"},
+		{"verified", nil, true, nil, "selected"}, {"unconfirmed", nil, false, nil, "unknown"}, {"verification timeout", nil, false, context.DeadlineExceeded, "unknown"}, {"submit timeout", context.DeadlineExceeded, false, nil, "unknown"}, {"submit timeout but selected", context.DeadlineExceeded, true, nil, "selected"}, {"conflict", Error("conflict", "conflict"), false, nil, "conflict"}, {"ineligible", Error("ineligible", "ineligible"), false, nil, "ineligible"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := &fakeSession{submit: func(context.Context) error { return tc.submit }, verify: func(context.Context) (bool, error) { return tc.verified, tc.verify }}
@@ -131,6 +132,63 @@ func TestSubmissionIsNeverReportedSelectedWithoutVerification(t *testing.T) {
 				t.Fatalf("missing pending verification event: %+v", l.events)
 			}
 		})
+	}
+}
+
+func TestWatchContinuesAfterSubmitReportsFull(t *testing.T) {
+	s := &fakeSession{}
+	s.submit = func(context.Context) error {
+		if s.submits == 1 {
+			return Error("full", "full")
+		}
+		return nil
+	}
+	s.verify = func(context.Context) (bool, error) { return s.verifies > 1, nil }
+	l := &eventLog{}
+	if err := runnerFor(s, l).Run(context.Background(), request("WatchCourse")); err != nil {
+		t.Fatal(err)
+	}
+	if s.queries != 2 || s.submits != 2 || s.verifies != 2 || !l.has(firstTarget.Key(), "full") || !l.has(firstTarget.Key(), "selected") {
+		t.Fatalf("calls %+v events %+v", s, l.events)
+	}
+}
+
+func TestPreSubmitFailureNeverOpensVerificationPage(t *testing.T) {
+	s := &fakeSession{submit: func(context.Context) error { return PreSubmitError("mismatch", "unsafe form") }}
+	l := &eventLog{}
+	if err := runnerFor(s, l).Run(context.Background(), request("CatchCourse")); err == nil {
+		t.Fatal("expected pre-submit failure")
+	}
+	if s.submits != 1 || s.verifies != 0 || !l.has(firstTarget.Key(), "mismatch") {
+		t.Fatalf("calls %+v events %+v", s, l.events)
+	}
+}
+
+func TestWatchContinuesWhenCapacityChangesBeforeSubmit(t *testing.T) {
+	s := &fakeSession{}
+	s.submit = func(context.Context) error {
+		if s.submits == 1 {
+			return PreSubmitError("full", "capacity changed")
+		}
+		return nil
+	}
+	l := &eventLog{}
+	if err := runnerFor(s, l).Run(context.Background(), request("WatchCourse")); err != nil {
+		t.Fatal(err)
+	}
+	if s.submits != 2 || s.verifies != 1 || !l.has(firstTarget.Key(), "full") || !l.has(firstTarget.Key(), "selected") {
+		t.Fatalf("calls %+v events %+v", s, l.events)
+	}
+}
+
+func TestPendingSubmissionNeverNavigatesToVerification(t *testing.T) {
+	s := &fakeSession{submit: func(context.Context) error { return Error("submit_pending", "still loading") }}
+	l := &eventLog{}
+	if err := runnerFor(s, l).Run(context.Background(), request("CatchCourse")); err == nil {
+		t.Fatal("expected unknown outcome")
+	}
+	if s.submits != 1 || s.verifies != 0 || !l.has(firstTarget.Key(), "unknown") {
+		t.Fatalf("calls %+v events %+v", s, l.events)
 	}
 }
 func TestTransientQueryRetriesAreBoundedAndBackOff(t *testing.T) {

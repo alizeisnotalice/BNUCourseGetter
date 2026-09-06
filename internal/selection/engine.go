@@ -104,8 +104,19 @@ func (r *Runner) step(ctx context.Context, req Request, t *task) (selected bool,
 	if err := ctx.Err(); err != nil {
 		return fail(err)
 	}
-	r.event(t.target, c, "submitted", "提交中，结果待核验")
 	submitErr := t.session.Submit(ctx)
+	if IsPreSubmit(submitErr) {
+		if Code(submitErr) == "full" {
+			r.event(t.target, c, "full", submitErr.Error())
+			t.done = req.Mode == "CatchCourse"
+			return false, nil
+		}
+		return fail(submitErr)
+	}
+	r.event(t.target, c, "submitted", "已提交，结果待核验")
+	if Code(submitErr) == "submit_pending" {
+		return fail(Error("unknown", "提交请求尚未结束，已停止操作；请等待后到教务系统核对，勿重复提交"))
+	}
 	// A click timeout is not evidence that the server rejected the selection.
 	ok, verifyErr := t.session.Verify(ctx)
 	t.done = true
@@ -117,6 +128,7 @@ func (r *Runner) step(ctx context.Context, req Request, t *task) (selected bool,
 		switch Code(submitErr) {
 		case "full":
 			r.event(t.target, c, "full", submitErr.Error())
+			t.done = req.Mode == "CatchCourse"
 			return false, nil
 		case "conflict", "ineligible":
 			return fail(submitErr)

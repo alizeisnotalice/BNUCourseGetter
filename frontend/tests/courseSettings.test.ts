@@ -8,9 +8,10 @@ function memoryStorage(initial: Record<string, string> = {}) {
 const courses = [{ type: 'major' as const, courseID: ' PHYS001 ', classID: ' 01 ' }]
 describe('safe course settings', () => {
   test('startup removes legacy secrets but preserves course list and unrelated settings', () => {
-    const store = memoryStorage({ password: 'secret', isRemember: 'yes', courses: JSON.stringify(courses), tutorial: 'done', speed: '2000' })
+    const store = memoryStorage({ password: 'secret', studentID: '2026123456', isRemember: 'yes', courses: JSON.stringify(courses), tutorial: 'done', speed: '2000' })
     clearLegacySecrets(store)
     expect(store.getItem('password')).toBeNull()
+    expect(store.getItem('studentID')).toBeNull()
     expect(store.getItem('isRemember')).toBeNull()
     expect(store.getItem('courses')).toBe(JSON.stringify(courses))
     expect(store.getItem('tutorial')).toBe('done')
@@ -20,7 +21,7 @@ describe('safe course settings', () => {
     const store = memoryStorage({ password: 'old' })
     saveSettings(store, { mode: 'CatchCourse', speed: 1000, studentID: ' 123 ', password: 'new secret', courses, headless: false, useWebVpn: false })
     expect(store.getItem('password')).toBeNull()
-    expect(store.getItem('studentID')).toBe('123')
+    expect(store.getItem('studentID')).toBeNull()
     expect(loadCourses(store)).toEqual([{ type: 'major', courseID: 'PHYS001', classID: '01' }])
   })
   test('trims without losing leading zeros; deduplicates by category, code and class', () => {

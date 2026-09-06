@@ -31,6 +31,7 @@ export function normalizeCourses(input: unknown): Course[] {
 }
 export function clearLegacySecrets(storage: StorageLike): void {
   storage.removeItem('password')
+  storage.removeItem('studentID')
   storage.removeItem('isRemember')
   storage.removeItem('isProtect')
 }
@@ -41,7 +42,6 @@ export function saveSettings(storage: StorageLike, value: CourseRequest): void {
   clearLegacySecrets(storage)
   storage.setItem('mode', value.mode)
   storage.setItem('speed', String(value.speed))
-  storage.setItem('studentID', value.studentID.trim())
   storage.setItem('network', value.useWebVpn ? 'webvpn' : 'intranet')
   storage.setItem('isHeadless', value.headless ? 'yes' : 'no')
   storage.setItem('courses', JSON.stringify(normalizeCourses(value.courses)))

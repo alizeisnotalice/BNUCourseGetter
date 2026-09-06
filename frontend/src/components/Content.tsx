@@ -7,6 +7,7 @@ import { EventsEmit, EventsOn } from '../wailsjs/runtime/runtime'
 import { clearLegacySecrets, courseKey, loadCourses, normalizeCourses, saveSettings } from '../libs/courseSettings'
 import type { Course, CourseRequest, CourseStatus } from '../libs/courseSettings'
 import { CourseResults } from './CourseResults'
+import { main } from '../wailsjs/go/models'
 
 type FormValues = Omit<CourseRequest, 'headless' | 'useWebVpn'> & {
   network: 'webvpn' | 'intranet'
@@ -43,6 +44,10 @@ export function Content() {
     }
     const normalized = normalizeCourses(courses)
     if (!normalized.length) { await Dialog('error', '请添加课程'); return }
+    if (!rehearsal) {
+      const answer = await Dialog('question', '即将进入正式选课：程序会对列表中的课程提交选课请求，并在选课结果中核验。请确认课程代码、班号和选课模式均已检查无误。')
+      if (answer !== 'Yes') return
+    }
     const request: CourseRequest = {
       mode: value.mode, speed: value.speed, studentID: value.studentID.trim(), password: value.password,
       courses: normalized, headless: rehearsal ? false : localStorage.getItem('isHeadless') !== 'no',
@@ -56,7 +61,8 @@ export function Content() {
       // 演练显示浏览器，但不改变用户正式选课的显示偏好。
       saveSettings(localStorage, { ...request, headless: localStorage.getItem('isHeadless') !== 'no' })
       EventsEmit('systemStatus', rehearsal ? '演练中' : value.mode === 'CatchCourse' ? '抢课中' : '蹲课中')
-      activeRun.current = rehearsal ? RehearseCourses(request) : StartCourses(request)
+      const backendRequest = main.CourseRequest.createFrom(request)
+      activeRun.current = rehearsal ? RehearseCourses(backendRequest) : StartCourses(backendRequest)
       await activeRun.current
     } catch (error) {
       reportError(error)
@@ -126,7 +132,7 @@ export function Content() {
             mode: localStorage.getItem('mode') || 'CatchCourse',
             speed: Number(localStorage.getItem('speed')) || 1000,
             _type: 'public',
-            studentID: localStorage.getItem('studentID') || '',
+            studentID: '',
             password: '',
             network: localStorage.getItem('network') || 'intranet',
           }}

@@ -10,7 +10,7 @@ export function tutorial() {
     steps: [
       { 
         element: undefined,
-        popover: { title: '使用教程', description: '欢迎使用小鸦抢课, 这个简单的教程将帮助您快速理解如何使用本软件' },
+        popover: { title: '使用教程', description: '欢迎使用北师大选课助手。本教程介绍课程设置、只查询演练和停止任务。' },
       },
       {
         element: '#version',
@@ -45,12 +45,8 @@ export function tutorial() {
         popover: { title: '关闭按钮', description: '点击这个按钮可以关闭软件, 并中断所有正在执行的抢课、蹲课任务' },
       },
       {
-        element: '#github',
-        popover: { title: 'Github', description: '点击这里会打开小鸦抢课的 GitHub 页面, 用于发布软件的最新版本' },
-      },
-      {
         element: '#current-status',
-        popover: { title: '当前日志', description: '这里会显示小鸦抢课正在干什么' },
+        popover: { title: '当前日志', description: '这里显示任务当前的进展。' },
       },
       {
         element: '#important-status',
@@ -74,7 +70,7 @@ export function tutorial() {
       },
       {
         element: '#catch-mode-select',
-        popover: { title: '单线程蹲课', description: '单线程蹲课: 与多线程蹲课相似, 区别是最多只会打开两个浏览器窗口' },
+        popover: { title: '单线程蹲课', description: '依次查询各门课程；确认一门选上后结束本轮任务。各课程页面会保留并复用。' },
       },
       {
         element: '#catch-mode-select',
@@ -94,7 +90,7 @@ export function tutorial() {
       },
       {
         element: '#network-select',
-        popover: { title: '网络环境', description: '一般情况下, 你应该连接校园网进行抢课/蹲课, 这样网络最稳定; 但如果您因故无法连接校园网, 小鸦抢课也可以使用 WebVPN 模式进入数字京师' },
+        popover: { title: '网络环境', description: '连接校园网时选择校园网；校外可选择 WebVPN，并先用只查询演练检查连接。' },
       },
       {
         element: '#headless-select',
@@ -110,7 +106,7 @@ export function tutorial() {
       },
       {
         element: '#course-type',
-        popover: { title: '课程类别', description: '如果实在不确定, 也可即添加"选公共选修课", 也添加"按开课计划选课"; 小鸦抢课会各开启一个页面, 在相应位置尝试抢课' },
+        popover: { title: '课程类别', description: '按教务系统实际可查询到目标课程的入口选择类别；不确定时先进行只查询演练。' },
       },
       {
         element: '#course-id',
@@ -154,7 +150,7 @@ export function tutorial() {
       },
       {
         element: undefined,
-        popover: { title: '重要提示', description: '4: 其他年级抢课开始前后, 教务系统会显示账号已锁定 (详见学校公众号发布的抢课说明), 与小鸦抢课无关' },
+        popover: { title: '重要提示', description: '4: 遇到账号锁定、验证码或登录失效，请根据教务系统提示和学校通知处理。' },
       },
       {
         element: undefined,

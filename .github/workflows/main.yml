@@ -29,35 +29,35 @@ jobs:
     runs-on: ${{ matrix.build.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
       
       - name: Setup Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache: 'go-build'
       
       - name: Setup Node
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
       
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 'latest'
+          bun-version: '1.4.0'
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.1
 
       - name: Build Wails
         run: wails build
 
       - name: Zip Mac Build
         if: matrix.build.platform == 'darwin/arm64'
-        run: zip -r build/bin/xyqk-mac-arm64.app.zip build/bin/小鸦抢课.app
+        run: zip -r build/bin/course-assistant-mac-arm64.app.zip build/bin/北师大选课助手.app
 
       # - name: Create Release
       #   uses: softprops/action-gh-release@v2

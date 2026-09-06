@@ -1,15 +1,16 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
-  "name": "小鸦抢课",
-  "outputfilename": "小鸦抢课",
+  "name": "北师大选课助手",
+  "outputfilename": "北师大选课助手",
   "frontend:install": "bun install",
   "frontend:build": "bun run build",
   "frontend:dev:watcher": "bun run dev",
   "frontend:dev:serverUrl": "auto",
   "wailsjsdir": "frontend/src",
   "devServer": "127.0.0.1:34100",
-  "author": {
-    "name": "LeafYeeXYZ",
-    "email": "xiaoyezi@leafyee.xyz"
+  "info": {
+    "productName": "北师大选课助手",
+    "productVersion": "2.3.1",
+    "comments": "本地修改版 2.3.1-safe.1；非学校官方软件"
   }
 }

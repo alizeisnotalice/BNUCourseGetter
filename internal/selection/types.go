@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type Target struct {
@@ -15,12 +17,16 @@ type Target struct {
 
 func (t Target) Key() string { return t.Type + "|" + t.CourseID + "|" + t.ClassID }
 
+func invalidTargetText(value string) bool {
+	return utf8.RuneCountInString(value) > 128 || strings.ContainsRune(value, '|') || strings.IndexFunc(value, unicode.IsControl) >= 0
+}
+
 func Normalize(targets []Target) ([]Target, error) {
 	seen := map[string]bool{}
 	result := make([]Target, 0, len(targets))
 	for _, t := range targets {
 		t.CourseID, t.ClassID = strings.TrimSpace(t.CourseID), strings.TrimSpace(t.ClassID)
-		if (t.Type != "public" && t.Type != "major") || t.CourseID == "" || t.ClassID == "" || strings.ContainsAny(t.CourseID+t.ClassID, "|\r\n") {
+		if (t.Type != "public" && t.Type != "major") || t.CourseID == "" || t.ClassID == "" || invalidTargetText(t.CourseID) || invalidTargetText(t.ClassID) {
 			return nil, errors.New("课程类别、课程代码或上课班号无效")
 		}
 		if !seen[t.Key()] {
@@ -50,10 +56,20 @@ type Event struct {
 	Message string `json:"message"`
 }
 
-type Fault struct{ Code, Message string }
+type Fault struct {
+	Code, Message string
+	BeforeSubmit  bool
+}
 
 func (e *Fault) Error() string         { return e.Message }
 func Error(code, message string) error { return &Fault{Code: code, Message: message} }
+func PreSubmitError(code, message string) error {
+	return &Fault{Code: code, Message: message, BeforeSubmit: true}
+}
+func IsPreSubmit(err error) bool {
+	var f *Fault
+	return errors.As(err, &f) && f.BeforeSubmit
+}
 func Code(err error) string {
 	var f *Fault
 	if errors.As(err, &f) {

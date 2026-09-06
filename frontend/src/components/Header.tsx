@@ -20,7 +20,7 @@ import {
   QuestionOutlined,
 } from '@ant-design/icons'
 
-const VERSION = '2.3.1'
+const VERSION = '2.3.1-safe.1'
 
 export function Header() {
 
@@ -42,7 +42,7 @@ export function Header() {
       <p
         className='w-full h-full flex items-center justify-start text-sm gap-2 pl-3'
       >
-        <span className='font-bold' data-tg-tour='测试'>小鸦抢课</span>
+        <span className='font-bold' data-tg-tour='测试'>北师大选课助手</span>
         <Tag id='version' className='m-0 border-rose-950 bg-white leading-none py-[0.15rem] px-[0.3rem]'>{VERSION}</Tag>
         <Tag id='status' className='m-0 border-rose-950 bg-white leading-none py-[0.15rem] px-[0.3rem]'>{systemStatus}</Tag>
       </p>
