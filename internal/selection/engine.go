@@ -160,7 +160,11 @@ func (r *Runner) Run(ctx context.Context, req Request) error {
 	}
 	var errs []error
 	if req.Mode == "WatchCourseSync" {
+		var reusable Session
 		defer func() {
+			if reusable != nil {
+				_ = reusable.Close()
+			}
 			for i := range tasks {
 				if tasks[i].session != nil {
 					_ = tasks[i].session.Close()
@@ -173,7 +177,21 @@ func (r *Runner) Run(ctx context.Context, req Request) error {
 				if tasks[i].done {
 					continue
 				}
+				if reusable != nil {
+					reusable.(interface{ Retarget(Target) }).Retarget(tasks[i].target)
+					tasks[i].session, reusable = reusable, nil
+				}
 				selected, err := r.step(ctx, req, &tasks[i])
+				// Reuse authenticated browser state only after an unambiguous step.
+				// Failed or uncertain sessions are closed before moving to another course.
+				if session := tasks[i].session; session != nil {
+					if _, ok := session.(interface{ Retarget(Target) }); ok && err == nil {
+						reusable = session
+					} else {
+						_ = session.Close()
+					}
+					tasks[i].session = nil
+				}
 				if err != nil {
 					errs = append(errs, err)
 				}

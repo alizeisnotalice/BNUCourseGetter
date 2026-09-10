@@ -53,7 +53,7 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.10.1
 
       - name: Build Wails
-        run: wails build
+        run: wails build -platform ${{ matrix.build.platform }}
 
       - name: Zip Mac Build
         if: matrix.build.platform == 'darwin/arm64'

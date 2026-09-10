@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -25,6 +26,12 @@ type Browser struct {
 }
 
 func Open(opts Options) (*Browser, error) {
+	if opts.ExecutablePath != "" {
+		info, err := os.Stat(opts.ExecutablePath)
+		if err != nil || info.IsDir() {
+			return nil, selection.Error("failed", "已配置的浏览器不存在或无法访问，请重新安装 Chrome 或 Edge 后重启应用")
+		}
+	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 15 * time.Second
 	}
@@ -39,12 +46,21 @@ func Open(opts Options) (*Browser, error) {
 	browser, err := pw.Chromium.Launch(launchOptions)
 	if err != nil {
 		_ = pw.Stop()
-		return nil, selection.Error("failed", "无法启动 Chromium，请检查浏览器安装")
+		return nil, selection.Error("failed", "浏览器启动失败，请检查 Chrome / Edge 是否能手动打开及系统运行权限，然后重启应用")
 	}
 	return &Browser{pw: pw, browser: browser, opts: opts}, nil
 }
 
 func (b *Browser) Close() { _ = b.browser.Close(); _ = b.pw.Stop() }
+
+// Retarget is called only between completed steps in synchronous mode.
+func (s *Session) Retarget(target selection.Target) {
+	s.target = target
+	s.current = matchedRow{}
+	s.term = ""
+	s.classFrame, s.detailFrame = nil, nil
+	s.clearFault()
+}
 
 func (b *Browser) NewSession(ctx context.Context, target selection.Target) (selection.Session, error) {
 	bc, err := b.browser.NewContext()
@@ -333,7 +349,7 @@ func (s *Session) login(ctx context.Context) error {
 				return false, operationError(ctx, err)
 			}
 		}
-		return visible(s.page.Locator("li[data-code='JW1304']")) || (s.opts.UseWebVPN && visible(s.page.Locator("#recently_div"))), nil
+		return visible(s.page.Locator("li[data-code='JW1304']")) || (s.opts.UseWebVPN && visible(s.portalEntries().First())), nil
 	})
 	if err != nil {
 		if selection.Code(err) == "mismatch" {
@@ -342,19 +358,65 @@ func (s *Session) login(ctx context.Context) error {
 		return err
 	}
 	if !visible(s.page.Locator("li[data-code='JW1304']")) && s.opts.UseWebVPN {
-		items := s.page.Locator("#recently_div > ul > li").Filter(playwright.LocatorFilterOptions{HasText: "教务管理系统"})
+		items := s.portalEntries()
 		if n, _ := items.Count(); n != 1 {
-			return selection.Error("mismatch", "数字京师中未找到唯一的教务管理系统入口，请先手动访问一次")
+			return selection.Error("mismatch", "数字京师中未找到唯一的教务管理系统入口，请在浏览器核对入口")
 		}
-		page, err := s.page.ExpectPopup(func() error { return items.Click() }, playwright.PageExpectPopupOptions{Timeout: playwright.Float(float64(s.opts.Timeout.Milliseconds()))})
-		if err != nil {
-			return operationError(ctx, err)
+		if err := s.openPortalEntry(ctx, items); err != nil {
+			return err
 		}
-		s.page = page
 	}
 	if err := s.poll(ctx, func() (bool, error) { return visible(s.page.Locator("li[data-code='JW1304']")), nil }); err != nil {
 		return err
 	}
 	s.initialized = true
 	return nil
+}
+
+func (s *Session) portalEntries() playwright.Locator {
+	recent := s.page.Locator("#recently_div > ul > li").Filter(playwright.LocatorFilterOptions{HasText: "教务管理系统"})
+	if n, err := recent.Count(); err == nil && n > 0 && visible(recent.First()) {
+		return recent
+	}
+	return s.page.GetByText("教务管理系统", playwright.PageGetByTextOptions{Exact: playwright.Bool(true)})
+}
+
+// Observe popups before clicking, while also checking same-tab navigation.
+func (s *Session) openPortalEntry(ctx context.Context, entry playwright.Locator) error {
+	pages := make(chan playwright.Page, 8)
+	handler := func(p playwright.Page) {
+		select {
+		case pages <- p:
+		default:
+		}
+	}
+	s.bc.OnPage(handler)
+	defer s.bc.RemoveListener("page", handler)
+	if err := entry.Click(); err != nil {
+		return operationError(ctx, err)
+	}
+	candidates := []playwright.Page{s.page}
+	return s.poll(ctx, func() (bool, error) {
+		for {
+			select {
+			case p := <-pages:
+				candidates = append(candidates, p)
+			default:
+				var found playwright.Page
+				for _, p := range candidates {
+					if !p.IsClosed() && visible(p.Locator("li[data-code='JW1304']")) {
+						if found != nil {
+							return false, selection.Error("mismatch", "出现多个教务页面，请关闭重复页面后重试")
+						}
+						found = p
+					}
+				}
+				if found != nil {
+					s.page = found
+					return true, nil
+				}
+				return false, nil
+			}
+		}
+	})
 }

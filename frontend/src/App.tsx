@@ -5,7 +5,7 @@ import { ConfigProvider, type ConfigProviderProps, Button } from 'antd'
 import { LoadingOutlined } from '@ant-design/icons'
 import { InstallBrowser } from './wailsjs/go/main/App'
 import { EventsEmit, EventsOn, EventsOff, WindowReload } from './wailsjs/runtime/runtime'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useZustand } from './libs/useZustand'
 import { Header } from './components/Header'
 import { Footer } from './components/Footer'
@@ -22,6 +22,7 @@ const AntdConfig: ConfigProviderProps = {
 }
 
 export default function App() {
+  const [installError, setInstallError] = useState('')
 
   const { setBrowserStatus, setSystemStatus, setCurrentStatus, setImportantStatus, browserStatus } = useZustand()
   // 阻止双击, 选中文字, 右键菜单等默认事件
@@ -40,7 +41,10 @@ export default function App() {
           localStorage.setItem('tutorial', 'done')
         }
       })
-      .catch(() => setBrowserStatus('安装失败'))
+      .catch((error: unknown) => {
+        setInstallError(String(error))
+        setBrowserStatus('安装失败')
+      })
   }, [setBrowserStatus])
   // 仅在此处 (使用事件) 修改系统状态
   useEffect(() => {
@@ -76,7 +80,7 @@ export default function App() {
       ) : browserStatus === '安装失败' ? (
         <div className='flex flex-col items-center justify-center'>
           <p className='font-bold mb-6'>
-            浏览器安装失败, 请确保网络连接正常并点击下方按钮重试
+            {installError || '浏览器组件准备失败，请检查网络后重试'}
           </p>
           <Button
             className='border-rose-950'
