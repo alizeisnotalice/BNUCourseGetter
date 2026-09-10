@@ -97,9 +97,12 @@ func (a *App) runCourses(req CourseRequest, dry bool) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	browser, err := portal.Open(portal.Options{StudentID: req.StudentID, Password: req.Password,
+	browser, err := portal.OpenContext(ctx, portal.Options{StudentID: req.StudentID, Password: req.Password,
 		Headless: req.Headless, UseWebVPN: req.UseWebVPN, DryRun: dry, ExecutablePath: browserPath})
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
 		return err
 	}
 	defer browser.Close()

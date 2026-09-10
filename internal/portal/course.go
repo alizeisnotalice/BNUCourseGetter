@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"net/url"
 	"strings"
 
 	"github.com/LeafYeeXYZ/BNUCourseGetter/internal/selection"
@@ -122,6 +123,9 @@ func (s *Session) queryReport(ctx context.Context, parent playwright.Frame, acti
 		}
 		return nil, operationError(ctx, err)
 	}
+	if response == nil {
+		return nil, selection.Error("mismatch", "查询未返回可核对的页面响应")
+	}
 	if response.Status() >= 500 {
 		return nil, selection.Error("transient", "教务查询服务暂时不可用")
 	}
@@ -172,6 +176,15 @@ func (s *Session) Query(ctx context.Context) (selection.Candidate, error) {
 		return selection.Candidate{}, selection.Error("not_open", "当前不在有效选课时间区段")
 	}
 	s.term = readTerm(frame)
+	// Use the page's accessible label; never infer that an empty table means full.
+	fullFilter := frame.GetByLabel("仅显示未选满课程", playwright.FrameGetByLabelOptions{Exact: playwright.Bool(true)})
+	if n, err := fullFilter.Count(); err != nil || n > 1 {
+		return selection.Candidate{}, selection.Error("mismatch", "无法唯一识别满员课程过滤开关")
+	} else if n == 1 && visible(fullFilter) {
+		if err := fullFilter.Uncheck(); err != nil {
+			return selection.Candidate{}, selection.Error("mismatch", "无法关闭满员课程过滤，请在演练中检查")
+		}
+	}
 	if s.target.Type == "major" {
 		all := frame.Locator("#kkdw_range_all")
 		if !visible(all) {
@@ -301,7 +314,7 @@ func (s *Session) Submit(ctx context.Context) error {
 		return selection.PreSubmitError("mismatch", "只查询演练禁止提交选课")
 	}
 	if ctx.Err() != nil {
-		return ctx.Err()
+		return selection.PreSubmitError("cancelled", "提交前任务已停止")
 	}
 	if s.classFrame == nil || s.term == "" {
 		return selection.PreSubmitError("mismatch", "尚未完成课程和学期定位")
@@ -309,7 +322,8 @@ func (s *Session) Submit(ctx context.Context) error {
 	// Re-read immediately before clicking: row ordering and capacity may change.
 	rows, err := readRows(s.classFrame)
 	if err != nil {
-		return operationError(ctx, err)
+		fault := operationError(ctx, err)
+		return selection.PreSubmitError(selection.Code(fault), fault.Error())
 	}
 	row, err := matchClass(rows, s.target, s.target.Type == "public")
 	if err != nil {
@@ -382,7 +396,24 @@ func (s *Session) Verify(ctx context.Context) (bool, error) {
 	}
 	// Clear old submit dialog errors; they must not short-circuit verification.
 	s.clearFault()
+	// Prefer the actual read-only link destination, retaining the legacy endpoint
+	// only for script-driven menus. Never accept an unrelated page response.
+	expectedURL := ""
+	if href, err := menu.GetAttribute("href"); err == nil && href != "" && !strings.HasPrefix(href, "#") {
+		if base, err := url.Parse(s.page.URL()); err == nil {
+			if ref, err := url.Parse(href); err == nil {
+				u := base.ResolveReference(ref)
+				if u.Scheme == "http" || u.Scheme == "https" {
+					u.Fragment = ""
+					expectedURL = u.String()
+				}
+			}
+		}
+	}
 	resp, err := s.page.ExpectResponse(func(url string) bool {
+		if expectedURL != "" {
+			return url == expectedURL
+		}
 		return strings.Contains(url, "wsxk.zxjg")
 	}, func() error { return menu.Click() }, playwright.PageExpectResponseOptions{Timeout: playwright.Float(float64(s.opts.Timeout.Milliseconds()))})
 	if err != nil {

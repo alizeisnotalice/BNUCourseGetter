@@ -158,6 +158,15 @@ func (r *Runner) Run(ctx context.Context, req Request) error {
 		tasks[i].target = t
 		r.event(t, Candidate{}, "pending", "等待查询")
 	}
+	defer func() {
+		if ctx.Err() != nil {
+			for _, t := range tasks {
+				if !t.done {
+					r.event(t.target, Candidate{}, "cancelled", "任务已停止")
+				}
+			}
+		}
+	}()
 	var errs []error
 	if req.Mode == "WatchCourseSync" {
 		var reusable Session

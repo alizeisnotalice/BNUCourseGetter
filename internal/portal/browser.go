@@ -26,6 +26,13 @@ type Browser struct {
 }
 
 func Open(opts Options) (*Browser, error) {
+	return OpenContext(context.Background(), opts)
+}
+
+func OpenContext(ctx context.Context, opts Options) (*Browser, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if opts.ExecutablePath != "" {
 		info, err := os.Stat(opts.ExecutablePath)
 		if err != nil || info.IsDir() {
@@ -39,11 +46,34 @@ func Open(opts Options) (*Browser, error) {
 	if err != nil {
 		return nil, selection.Error("failed", "无法启动浏览器驱动，请先完成浏览器安装")
 	}
-	launchOptions := playwright.BrowserTypeLaunchOptions{Headless: playwright.Bool(opts.Headless && !opts.DryRun)}
+	if err := ctx.Err(); err != nil {
+		_ = pw.Stop()
+		return nil, err
+	}
+	launchDone := make(chan struct{})
+	watchDone := make(chan struct{})
+	go func() {
+		defer close(watchDone)
+		select {
+		case <-ctx.Done():
+			_ = pw.Stop()
+		case <-launchDone:
+		}
+	}()
+	launchOptions := playwright.BrowserTypeLaunchOptions{Headless: playwright.Bool(opts.Headless && !opts.DryRun), Timeout: playwright.Float(float64(opts.Timeout.Milliseconds()))}
 	if opts.ExecutablePath != "" {
 		launchOptions.ExecutablePath = playwright.String(opts.ExecutablePath)
 	}
 	browser, err := pw.Chromium.Launch(launchOptions)
+	close(launchDone)
+	<-watchDone
+	if ctx.Err() != nil {
+		if browser != nil {
+			_ = browser.Close()
+		}
+		_ = pw.Stop()
+		return nil, ctx.Err()
+	}
 	if err != nil {
 		_ = pw.Stop()
 		return nil, selection.Error("failed", "浏览器启动失败，请检查 Chrome / Edge 是否能手动打开及系统运行权限，然后重启应用")
